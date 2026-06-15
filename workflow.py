@@ -20,6 +20,7 @@ def classifier_node(state: AgentState) -> dict:
     print("[EVENT] Agent Classifier Node: Invoking LLM for analysis...")
 
     llm = ChatGroq(model="llama-3.3-70b-versatile")
+    //ensure structured output by Pydantic
     structured_llm = llm.with_structured_output(BankTicketAnalysis)
 
     system_prompt = """
@@ -39,16 +40,20 @@ def classifier_node(state: AgentState) -> dict:
 def escalate_to_human_node(state: AgentState) -> dict:
     print("\n🚨 [PAUSED FOR HUMAN APPROVAL] 🚨")
     print(f"CRITICAL RISK DETECTED: {state['analysis']['summary']}")
-
-    decision = input("Approve immediate escalation? (yes/no): ")
-
-    if decision.lower() == "yes":
+    
+    human_approval = interrupt(
+        {
+            "question": "Approve immediate escalation?",
+            "ticket_summary": state['analysis']['summary']
+        }
+    )
+    
+    if human_approval.get("approved") == True:
         print("[HUMAN ACTION]: Escalated to Security Team.")
     else:
         print("[HUMAN ACTION]: Ticket returned to normal queue.")
-
+        
     return {}
-
 
 def route_to_standard_queue_node(state: AgentState) -> dict:
     category = state["analysis"]["issue_category"]
@@ -89,5 +94,6 @@ def build_workflow():
 
     workflow.add_edge("escalate_human", END)
     workflow.add_edge("standard_queue", END)
+    memory = MemorySaver()
 
-    return workflow.compile()
+   return workflow.compile(checkpointer=memory)
