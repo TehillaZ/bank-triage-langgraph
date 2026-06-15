@@ -5,6 +5,7 @@ import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
 from workflow import build_workflow
+from langgraph.types import Command
 
 
 if __name__ == "__main__":
