@@ -21,6 +21,5 @@ if __name__ == "__main__":
 
     human_response = {"approved": True}
 
-    app.invoke(human_response, config)
-
+    app.invoke(Command(resume=human_response), config)
     print("\n=== Workflow Finished Successfully ===")
