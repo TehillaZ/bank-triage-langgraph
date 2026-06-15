@@ -11,12 +11,32 @@ class AgentState(TypedDict):
 
 
 def preprocess_node(state: AgentState) -> dict:
+    """
+    Preprocesses the raw customer inbound text by removing unnecessary 
+    whitespaces and padding to optimize token usage for the LLM.
+    
+    Args:
+        state (AgentState): The current state of the conversation graph.
+        
+    Returns:
+        dict: A dictionary updating the 'cleaned_input' key in the state.
+    """
     print("[EVENT] Preprocess Node: Cleaning customer text...")
     cleaned = state["raw_input"].strip()
     return {"cleaned_input": cleaned}
 
 
 def classifier_node(state: AgentState) -> dict:
+    """
+    Agent node that invokes the LLM to analyze and classify the customer request.
+    Uses structured output to guarantee the response matches the required schema.
+    
+    Args:
+        state (AgentState): The current state containing the cleaned input text.
+        
+    Returns:
+        dict: A dictionary updating the 'analysis' key with the structured data.
+    """
     print("[EVENT] Agent Classifier Node: Invoking LLM for analysis...")
 
     llm = ChatGroq(model="llama-3.3-70b-versatile")
@@ -38,6 +58,16 @@ def classifier_node(state: AgentState) -> dict:
 
 
 def escalate_to_human_node(state: AgentState) -> dict:
+    """
+    A Human-in-the-loop node that pauses graph execution for high-risk tickets.
+    Utilizes LangGraph's native interrupt mechanism to wait for manual approval.
+    
+    Args:
+        state (AgentState): The current state containing the LLM analysis.
+        
+    Returns:
+        dict: An empty dictionary as it logs actions but doesn't mutate state data directly.
+    """
     print("\n🚨 [PAUSED FOR HUMAN APPROVAL] 🚨")
     print(f"CRITICAL RISK DETECTED: {state['analysis']['summary']}")
     
@@ -56,12 +86,32 @@ def escalate_to_human_node(state: AgentState) -> dict:
     return {}
 
 def route_to_standard_queue_node(state: AgentState) -> dict:
+    """
+    Standard routing node that processes safe/low-priority tickets 
+    and assigns them to the appropriate department queue.
+    
+    Args:
+        state (AgentState): The current state containing the classification results.
+        
+    Returns:
+        dict: An empty dictionary representing completion of routing.
+    """
     category = state["analysis"]["issue_category"]
     print(f"[ROUTE] Assigned standard ticket for department: {category}.")
     return {}
 
 
 def router_edge(state: AgentState) -> str:
+    """
+    A conditional edge (router) that inspects the LLM's priority assessment
+    and determines the next node execution path.
+    
+    Args:
+        state (AgentState): The current state containing the priority key.
+        
+    Returns:
+        str: The target route name ('escalate' or 'standard').
+    """
     print("[EVENT] Router Node: Checking priority...")
 
     priority = state["analysis"]["priority"]
@@ -73,6 +123,13 @@ def router_edge(state: AgentState) -> str:
 
 
 def build_workflow():
+    """
+    Constructs and compiles the StateGraph workflow, integrating nodes,
+    conditional edges, and state persistence (memory checkpointer).
+    
+    Returns:
+        CompiledGraph: The ready-to-run LangGraph workflow.
+    """
     workflow = StateGraph(AgentState)
 
     workflow.add_node("preprocess", preprocess_node)
