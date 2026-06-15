@@ -14,7 +14,13 @@ if __name__ == "__main__":
 
     print("=== Starting LangGraph Bank Triage Workflow ===")
 
+    config = {"configurable": {"thread_id": "bank_session_123"}}
     initial_state = {"raw_input": mock_input}
-    app.invoke(initial_state)
 
-    print("=== Workflow Finished Successfully ===")
+    app.invoke(initial_state, config)
+
+    human_response = {"approved": True}
+
+    app.invoke(human_response, config)
+
+    print("\n=== Workflow Finished Successfully ===")

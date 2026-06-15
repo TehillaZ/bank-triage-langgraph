@@ -2,6 +2,8 @@ from typing import TypedDict, Optional
 from langgraph.graph import StateGraph, END
 from langchain_groq import ChatGroq
 from models import BankTicketAnalysis
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.types import interrupt
 
 
 class AgentState(TypedDict):
@@ -40,7 +42,6 @@ def classifier_node(state: AgentState) -> dict:
     print("[EVENT] Agent Classifier Node: Invoking LLM for analysis...")
 
     llm = ChatGroq(model="llama-3.3-70b-versatile")
-    //ensure structured output by Pydantic
     structured_llm = llm.with_structured_output(BankTicketAnalysis)
 
     system_prompt = """
@@ -48,7 +49,7 @@ def classifier_node(state: AgentState) -> dict:
         Analyze the customer's request and classify it.
         Return category, priority, summary, and missing_info.
         """
-
+    
     response = structured_llm.invoke([
         ("system", system_prompt),
         ("user", state["cleaned_input"])
@@ -153,4 +154,4 @@ def build_workflow():
     workflow.add_edge("standard_queue", END)
     memory = MemorySaver()
 
-   return workflow.compile(checkpointer=memory)
+    return workflow.compile(checkpointer=memory)
