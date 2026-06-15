@@ -86,7 +86,19 @@ OMG! Someone stole my wallet and I just saw a charge of $500 that I didn't make!
 ```
 
 ---
+## Running Example
+```
+=== Starting LangGraph Bank Triage Workflow ===
+[EVENT] Preprocess Node: Cleaning customer text...
+[EVENT] Agent Classifier Node: Invoking LLM for analysis...
+[EVENT] Router Node: Checking priority...
 
+🚨 [PAUSED FOR HUMAN APPROVAL] 🚨
+CRITICAL RISK DETECTED: Customer requests to block their card due to a stolen wallet and a fraudulent charge of $500.
+
+[HUMAN ACTION]: Escalated to Security Team.
+=== Workflow Finished Successfully ===
+```
 ## Learning Objectives
 
 This project demonstrates:
