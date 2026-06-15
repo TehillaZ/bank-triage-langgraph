@@ -69,8 +69,6 @@ def escalate_to_human_node(state: AgentState) -> dict:
     Returns:
         dict: An empty dictionary as it logs actions but doesn't mutate state data directly.
     """
-    print("\n🚨 [PAUSED FOR HUMAN APPROVAL] 🚨")
-    print(f"CRITICAL RISK DETECTED: {state['analysis']['summary']}")
     
     human_approval = interrupt(
         {
@@ -79,6 +77,11 @@ def escalate_to_human_node(state: AgentState) -> dict:
         }
     )
     
+    if not human_approval:
+        print("\n🚨 [PAUSED FOR HUMAN APPROVAL] 🚨")
+        print(f"CRITICAL RISK DETECTED: {state['analysis']['summary']}")
+        return {}
+        
     if human_approval.get("approved") == True:
         print("[HUMAN ACTION]: Escalated to Security Team.")
     else:
