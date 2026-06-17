@@ -7,6 +7,16 @@ This project implements an intelligent bank support ticket triage system using *
 The system simulates a real-world banking support process where high-risk requests receive immediate attention and can be escalated for human approval.
 
 ---
+## Personal Notes
+This project was my first hands-on experience with LangGraph and AI workflow orchestration.
+Since the topic was completely new to me,   
+I spent additional time learning the fundamentals through online courses (YouTube)
+I intentionally focused on creating a simple and readable architecture rather than a highly complex implementation In order to build
+clear and maintainable workflow while understanding the core concepts of graph-based AI agents,
+This project was a valuable learning experience that helped me better understand how AI workflows are designed, 
+routed, and monitored in real-world applications.
+
+---
 
 ## Features
 
