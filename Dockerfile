@@ -5,8 +5,10 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+COPY requirements.txt .
+
 RUN python -m pip install --upgrade pip \
-    && python -m pip install pytest python-dotenv pydantic langgraph langchain-groq
+    && python -m pip install -r requirements.txt
 
 COPY . .
 

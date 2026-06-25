@@ -2,6 +2,7 @@
 .git
 .github
 __pycache__/
+.pytest_cache/
 *.pyc
 audit_logs/
 tests/__pycache__/

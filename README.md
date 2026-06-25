@@ -1,4 +1,4 @@
-# Bank Ticket Triage Workflow
+# Bank Ticket Triage Workflow 🏦
 
 [![CI](https://github.com/TehillaZ/bank-triage-langgraph/actions/workflows/ci.yml/badge.svg)](https://github.com/TehillaZ/bank-triage-langgraph/actions/workflows/ci.yml)
 
@@ -73,6 +73,12 @@ flowchart TD
 `app.py` runs three built-in demo examples: a high-risk fraud case, an ambiguous missing-information case, and a standard low-priority case.
 
 ## Run The Project
+
+Install dependencies:
+
+```bash
+python -m pip install -r requirements.txt
+```
 
 ### CLI Usage
 
@@ -230,7 +236,6 @@ The tests cover preprocessing, standard routing, red-flag escalation, ambiguous 
 
 ## Future Improvements
 
-- Add a `requirements.txt` or `pyproject.toml` for reproducible dependency installation.
 - Add batch input support for CSV or folder-based ticket processing.
 - Add an optional HTTP endpoint for local service usage.
 - Add stricter linting and formatting with tools such as Ruff or Black.
