@@ -22,3 +22,4 @@ class BankTicketAnalysis(BaseModel):
     missing_info: str = Field(
         description="Important missing information from the customer request, or 'None'."
     )
+
