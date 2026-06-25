@@ -103,10 +103,18 @@ def route_to_standard_queue_node(state: AgentState) -> dict:
     category = state["analysis"]["issue_category"]
     print(f"[ROUTE] Assigned standard ticket for department: {category}.")
     return {}
+    
+def flag_for_review_node(state: AgentState) -> dict:
+    """
+    Routes ambiguous or low-confidence tickets to a manual review queue
+    instead of silently processing them as standard tickets.
+    """
+    print(f"[ROUTE] Flagged for manual review: {state['analysis']['summary']}")
+    return {}
 
 
 def router_edge(state: AgentState) -> str:
-    """
+     """
     A conditional edge (router) that inspects the LLM's priority assessment
     and determines the next node execution path.
     
@@ -119,9 +127,14 @@ def router_edge(state: AgentState) -> str:
     print("[EVENT] Router Node: Checking priority...")
 
     priority = state["analysis"]["priority"]
+    confidence = state["analysis"]["confidence"]
+    missing_info = state["analysis"]["missing_info"]
 
     if priority == "High_Priority":
         return "escalate"
+
+    if confidence == "Low" or (missing_info and missing_info.lower() != "none"):
+        return "needs_review"
 
     return "standard"
 
@@ -140,21 +153,25 @@ def build_workflow():
     workflow.add_node("classifier", classifier_node)
     workflow.add_node("escalate_human", escalate_to_human_node)
     workflow.add_node("standard_queue", route_to_standard_queue_node)
+    workflow.add_node("needs_review", flag_for_review_node)  
 
     workflow.set_entry_point("preprocess")
     workflow.add_edge("preprocess", "classifier")
 
-    workflow.add_conditional_edges(
+    workflow.add_conditional_edges(                      
         "classifier",
         router_edge,
         {
             "escalate": "escalate_human",
+            "needs_review": "needs_review",
             "standard": "standard_queue"
         }
     )
 
     workflow.add_edge("escalate_human", END)
     workflow.add_edge("standard_queue", END)
+    workflow.add_edge("needs_review", END)                      
+
     memory = MemorySaver()
 
     return workflow.compile(checkpointer=memory)
