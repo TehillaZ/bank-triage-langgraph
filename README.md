@@ -1,6 +1,6 @@
 # Bank Ticket Triage Workflow 🏦
 
-[![CI](https://github.com/TehillaZ/bank-triage-langgraph/actions/workflows/ci.yml/badge.svg)](https://github.com/TehillaZ/bank-triage-langgraph/actions/workflows/ci.yml)
+[![CI](https://github.com/TehillaZ/bank-triage-langgraph/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/TehillaZ/bank-triage-langgraph/actions/workflows/ci.yml)
 
 Bank Ticket Triage Workflow is a local AI-assisted support-ticket triage system for banking requests. It classifies customer messages with structured LLM output, applies deterministic safety rules, and routes each ticket to the right path: standard handling, manual review, or human escalation.
 
