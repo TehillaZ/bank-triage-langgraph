@@ -1,102 +1,178 @@
-# 🏦 Bank Ticket Triage Workflow
+# Bank Ticket Triage Workflow
 
-## Overview
-This project implements an intelligent bank support ticket triage system using **LangGraph** and **LLMs**. The workflow automatically analyzes incoming customer requests, classifies them, determines their urgency, and routes them to the appropriate handling path.
+[![CI](https://github.com/TehillaZ/bank-triage-langgraph/actions/workflows/ci.yml/badge.svg)](https://github.com/TehillaZ/bank-triage-langgraph/actions/workflows/ci.yml)
 
-The system simulates a real-world banking support process where high-risk requests receive immediate attention and can be escalated for human approval. It also includes a deterministic safety layer that does not rely solely on the LLM's judgment, and a review path for ambiguous or low-confidence tickets.
+Bank Ticket Triage Workflow is a local AI-assisted support-ticket triage system for banking requests. It classifies customer messages with structured LLM output, applies deterministic safety rules, and routes each ticket to the right path: standard handling, manual review, or human escalation.
 
----
 
-## Personal Notes
-This project was my first hands-on experience with LangGraph and AI workflow orchestration.
-Since the topic was completely new to me,
-I spent additional time learning the fundamentals through online courses (YouTube).
-I intentionally focused on creating a simple and readable architecture rather than a highly complex implementation, in order to build
-a clear and maintainable workflow while understanding the core concepts of graph-based AI agents.
+## Why This Project?
 
-After receiving feedback on the initial version, I extended the project with a deterministic rule-based safety layer, additional classification dimensions (confidence and sentiment), a dedicated review path for ambiguous tickets, and a small evaluation set covering multiple ticket types instead of a single hardcoded example.
+Banks receive support messages with very different risk levels. A branch-hours question can be handled normally, while a stolen-card report or suspicious-charge message needs fast escalation.
 
-This project was a valuable learning experience that helped me better understand how AI workflows are designed,
-routed, monitored, and made more robust in real-world applications.
+This project demonstrates a practical AI workflow pattern: the LLM proposes a structured classification, but deterministic routing code makes the final decision. That matters because high-risk support flows should not depend only on model judgment. Red-flag rules, confidence checks, and missing-information checks provide a safer layer around the classifier.
 
----
+## Tech Stack
 
-## Features
-* **Preprocessing stage**
-  * Cleans and normalizes incoming customer messages.
-* **AI-powered classification**
-  * Uses an LLM with structured output to analyze requests.
-  * Extracts:
-    * Issue category
-    * Priority level
-    * Confidence level
-    * Customer sentiment
-    * Request summary
-    * Missing information
-* **Deterministic red-flag layer**
-  * A keyword/amount-based regex check (e.g. "stolen", "fraud", large dollar amounts) that can force escalation regardless of the LLM's own priority classification.
-* **Intelligent routing**
-  * Standard requests are assigned to the appropriate department.
-  * High-priority or red-flagged requests are escalated for immediate attention.
-  * Ambiguous or low-confidence requests are flagged for manual review instead of being silently treated as standard.
-* **Human approval path**
-  * Critical cases can pause the workflow and require human confirmation before taking action.
-* **Event streaming**
-  * Each step prints status messages, providing full visibility into the execution process.
-* **Evaluation set**
-  * Multiple labeled example tickets (high-risk, ambiguous, and standard) are run through the workflow to demonstrate routing behavior across different scenarios.
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-Agent%20Workflow-1C3C3C?style=for-the-badge)
+![LangChain](https://img.shields.io/badge/LangChain-LLM%20Orchestration-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
+![Groq](https://img.shields.io/badge/Groq-LLM%20Inference-F55036?style=for-the-badge)
+![Pydantic](https://img.shields.io/badge/Pydantic-Data%20Validation-E92063?style=for-the-badge&logo=pydantic&logoColor=white)
+![python-dotenv](https://img.shields.io/badge/python--dotenv-Environment%20Config-ECD53F?style=for-the-badge)
+![pytest](https://img.shields.io/badge/pytest-Tested-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/GitHub%20Actions-CI-2088FF?style=for-the-badge&logo=githubactions&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![JSONL Audit Logs](https://img.shields.io/badge/JSONL-Audit%20Logs-4B5563?style=for-the-badge)
 
----
+## Project Highlights
+
+| Highlight | What It Shows |
+| --- | --- |
+| Structured LLM outputs | `models.py` defines a Pydantic schema for category, priority, sentiment, confidence, summary, reasoning, and missing information. |
+| Deterministic safety rules | `router_edge()` checks red-flag patterns before trusting the model's priority. |
+| Confidence-based routing | Low-confidence tickets are sent to `needs_review` instead of standard processing. |
+| Human review path | High-risk tickets route to the LangGraph human escalation node. |
+| Audit logging | Routing decisions are written to a local JSONL audit log for traceability. |
+| Docker support | The repository includes a `Dockerfile` for containerized CLI/demo execution. |
+| CI automation | GitHub Actions runs the test suite on push and pull request. |
+
+## Key Features
+
+- Classifies bank support text into structured categories with `langchain-groq`.
+- Uses Pydantic `Literal` fields instead of free-text classifier labels.
+- Applies red-flag regex rules for urgent fraud, stolen-card, and unauthorized-charge signals.
+- Routes tickets to `standard`, `needs_review`, or `escalate`.
+- Sends ambiguous, incomplete, low-confidence, or invalid states to manual review.
+- Writes local JSONL audit entries with route, confidence, flags, reasoning, and errors.
+- Provides both a single-ticket CLI and a built-in demo runner.
+- Includes pytest coverage, GitHub Actions CI, and Docker execution.
 
 ## Architecture
-```
-Customer Request
-       ↓
-Preprocess Node
-       ↓
-AI Classifier Node
-       ↓
-Priority Router (red-flag check → priority → confidence/missing info)
-   ↙            ↓            ↘
-Standard      Needs Review    Human Escalation
-Queue
-   ↓              ↓                ↓
-  END            END              END
-```
 
----
+```mermaid
+flowchart TD
+    A[Customer ticket text] --> B[preprocess_node]
+    B --> C[classifier_node]
+    C --> D{router_edge}
 
-## Technologies
-* Python
-* LangGraph
-* LangChain
-* Groq API
-* Pydantic
-* dotenv
+    D -->|Red flag or high priority| E[escalate_human]
+    D -->|Low confidence, missing info, or invalid state| F[needs_review]
+    D -->|Regular priority with usable confidence| G[standard_queue]
 
----
+    E --> H[END]
+    F --> H
+    G --> H
 
-## Example Request
-```
-OMG! Someone stole my wallet and I just saw a charge of $500 that I didn't make! Please block my card immediately!!!
+    D -. writes .-> I[(audit_logs/triage_audit.jsonl)]
 ```
 
-## Example Classification
-```json
-{
-  "issue_category": "Fraud_Alert",
-  "priority": "High_Priority",
-  "confidence": "High",
-  "sentiment": "Distressed",
-  "summary": "Customer reports unauthorized charges and requests an immediate card block.",
-  "missing_info": "Card number or account identification."
-}
+## How It Works
+
+`main.py` accepts one custom support ticket from command-line arguments or stdin. It preprocesses the input, asks the Groq-backed classifier for a structured response, and prints the final routing decision.
+
+`app.py` runs three built-in demo examples: a high-risk fraud case, an ambiguous missing-information case, and a standard low-priority case.
+
+## Run The Project
+
+### CLI Usage
+
+Pass the ticket as a single command-line argument:
+
+```bash
+python main.py "My account is locked"
 ```
 
----
+Or pipe input through stdin:
 
-## Running Example
+```bash
+echo "Someone stole my card and I see a $500 charge" | python main.py
 ```
+
+The CLI prints the classification result and routing decision.
+
+### Demo Usage
+
+Run the built-in evaluation/demo set:
+
+```bash
+python app.py
+```
+
+### Docker Usage
+
+Docker is supported through the repository `Dockerfile`.
+
+Build the Docker image:
+
+```bash
+docker build -t bank-triage-langgraph .
+```
+
+Run the CLI through Docker:
+
+```bash
+docker run --rm --env-file .env bank-triage-langgraph "My account is locked"
+```
+
+Run the demo script through Docker:
+
+```bash
+docker run --rm --env-file .env --entrypoint python bank-triage-langgraph app.py
+```
+
+## Example Outputs
+
+### Standard Request
+
+Input:
+
+```text
+What are your branch opening hours on Sundays?
+```
+
+Expected behavior:
+
+```text
+Classification: General support / regular priority
+Routing decision: standard
+```
+
+### High-Risk Request
+
+Input:
+
+```text
+Someone stole my wallet and I saw an unauthorized charge of $500.
+```
+
+Expected behavior:
+
+```text
+Classification: Fraud or card-related concern
+Routing decision: escalate
+Reason: deterministic red-flag rule detects urgent risk
+```
+
+### Ambiguous Request
+
+Input:
+
+```text
+I have a problem with my account, can someone help?
+```
+
+Expected behavior:
+
+```text
+Classification: likely general support, but missing details
+Routing decision: needs_review
+```
+
+## Sample Run
+
+Example output from `python app.py`:
+
+```text
 === Starting LangGraph Bank Triage Workflow ===
 
 === Running ticket: fraud_high_risk ===
@@ -124,19 +200,39 @@ OMG! Someone stole my wallet and I just saw a charge of $500 that I didn't make!
 === Workflow Finished Successfully ===
 ```
 
----
+## Tests
 
-## Learning Objectives
-This project demonstrates:
-* Graph-based workflow orchestration with LangGraph.
-* Structured LLM outputs using Pydantic models.
-* Conditional routing and switch-case edges.
-* Combining deterministic rule-based logic with LLM-driven decisions for safer automation.
-* Human-in-the-loop workflows.
-* Real-time event tracing and transparency.
-* Building AI-powered support automation systems with a small evaluation set instead of a single hardcoded example.
+Run:
 
----
+```bash
+pytest
+```
 
-### Author
-Tehila – AI Workflow Engineering Homework Project
+The tests cover preprocessing, standard routing, red-flag escalation, ambiguous input review, empty/invalid input handling, structured audit logging, and router safety when classifier fields are missing or invalid.
+
+## Quality Gates
+
+| Quality Gate | Tooling | Current Status |
+| --- | --- | --- |
+| Unit tests | `pytest` | Configured |
+| Continuous integration | GitHub Actions | Configured |
+| Container build | `Dockerfile` | Configured |
+| Audit trail | Local JSONL logs | Configured |
+| Linting | IDE diagnostics only | Partial |
+
+## Known Limitations
+
+- The classifier depends on the Groq API and requires the appropriate environment configuration.
+- The CLI processes one ticket at a time.
+- Audit logs are local JSONL files, not a database.
+- The demo auto-approves human escalation for demonstration purposes.
+- The route is printed/logged, but there is no full production queue integration.
+
+## Future Improvements
+
+- Add a `requirements.txt` or `pyproject.toml` for reproducible dependency installation.
+- Add batch input support for CSV or folder-based ticket processing.
+- Add an optional HTTP endpoint for local service usage.
+- Add stricter linting and formatting with tools such as Ruff or Black.
+- Add Docker-based test execution in CI.
+- Add richer audit-log querying or export tools.

@@ -1,4 +1,7 @@
+import json
 import re
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import TypedDict, Optional
 from langgraph.graph import StateGraph, END
 from langchain_groq import ChatGroq
@@ -7,19 +10,24 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import interrupt
 
 
-class AgentState(TypedDict):
+class AgentState(TypedDict, total=False):
     raw_input: str
     cleaned_input: str
     analysis: Optional[dict]
+    error: Optional[dict]
 
 
 RED_FLAG_PATTERNS = [
     r"\bstolen\b",
     r"\bfraud(ulent)?\b",
     r"\bunauthorized\b",
+    r"\bhacked\b",
+    r"\bmoney is missing\b",
     r"didn'?t (make|authorize)",
     r"\$\d{3,}",
 ]
+
+AUDIT_LOG_PATH = Path("audit_logs") / "triage_audit.jsonl"
 
 
 def contains_red_flag(text: str) -> bool:
@@ -33,8 +41,49 @@ def contains_red_flag(text: str) -> bool:
     Returns:
         bool: True if any red-flag pattern is found in the text.
     """
+    if not isinstance(text, str):
+        return False
+
     text_lower = text.lower()
     return any(re.search(pattern, text_lower) for pattern in RED_FLAG_PATTERNS)
+
+
+def build_audit_entry(
+    state: AgentState,
+    routing_decision: str,
+    red_flag_detected: bool,
+) -> dict:
+    analysis = state.get("analysis") or {}
+    if not isinstance(analysis, dict):
+        analysis = {}
+
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "input_text": state.get("raw_input"),
+        "cleaned_input": state.get("cleaned_input"),
+        "detected_category": analysis.get("issue_category"),
+        "flags": {
+            "red_flag": red_flag_detected,
+            "missing_info": analysis.get("missing_info"),
+        },
+        "confidence": analysis.get("confidence"),
+        "routing_decision": routing_decision,
+        "reasoning": analysis.get("reasoning"),
+        "error": state.get("error"),
+    }
+
+
+def append_audit_log(entry: dict) -> None:
+    try:
+        AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with AUDIT_LOG_PATH.open("a", encoding="utf-8") as log_file:
+            log_file.write(json.dumps(entry) + "\n")
+    except OSError as exc:
+        print(f"[ERROR] Failed to write audit log: {exc}")
+
+
+def error_result(message: str) -> dict:
+    return {"error": {"message": message}}
 
 
 def preprocess_node(state: AgentState) -> dict:
@@ -49,7 +98,15 @@ def preprocess_node(state: AgentState) -> dict:
         dict: A dictionary updating the 'cleaned_input' key in the state.
     """
     print("[EVENT] Preprocess Node: Cleaning customer text...")
-    cleaned = state["raw_input"].strip()
+    raw_input = state.get("raw_input")
+
+    if not isinstance(raw_input, str):
+        return {
+            "cleaned_input": "",
+            **error_result("Missing or invalid raw_input; expected a string."),
+        }
+
+    cleaned = raw_input.strip()
     return {"cleaned_input": cleaned}
 
 
@@ -158,21 +215,71 @@ def router_edge(state: AgentState) -> str:
     """
     print("[EVENT] Router Node: Checking priority...")
 
-    if contains_red_flag(state["cleaned_input"]):
-        print("[RED FLAG] Deterministic rule triggered escalation.")
-        return "escalate"
+    cleaned_input = state.get("cleaned_input")
 
-    priority = state["analysis"]["priority"]
-    confidence = state["analysis"]["confidence"]
-    missing_info = state["analysis"]["missing_info"]
+    if not isinstance(cleaned_input, str):
+        route = "needs_review"
+        state["error"] = error_result(
+            "Missing or invalid cleaned_input; expected a string."
+        )["error"]
+        print(f"[ERROR] {state['error']['message']}")
+        append_audit_log(build_audit_entry(state, route, False))
+        return route
+
+    red_flag_detected = contains_red_flag(cleaned_input)
+
+    if red_flag_detected:
+        print("[RED FLAG] Deterministic rule triggered escalation.")
+        route = "escalate"
+        append_audit_log(build_audit_entry(state, route, red_flag_detected))
+        return route
+
+    analysis = state.get("analysis")
+
+    if not isinstance(analysis, dict):
+        route = "needs_review"
+        state["error"] = error_result(
+            "Missing or invalid analysis; expected classifier output."
+        )["error"]
+        print(f"[ERROR] {state['error']['message']}")
+        append_audit_log(build_audit_entry(state, route, red_flag_detected))
+        return route
+
+    required_fields = ["priority", "confidence", "missing_info"]
+    missing_fields = [
+        field
+        for field in required_fields
+        if not isinstance(analysis.get(field), str)
+    ]
+
+    if missing_fields:
+        route = "needs_review"
+        state["error"] = error_result(
+            f"Missing or invalid analysis fields: {', '.join(missing_fields)}."
+        )["error"]
+        print(f"[ERROR] {state['error']['message']}")
+        append_audit_log(build_audit_entry(state, route, red_flag_detected))
+        return route
+
+    priority = analysis["priority"]
+    confidence = analysis["confidence"]
+    missing_info = analysis["missing_info"]
 
     if priority == "High_Priority":
-        return "escalate"
+        route = "escalate"
+    elif confidence == "Low" or (missing_info and missing_info.lower() != "none"):
+        route = "needs_review"
+    elif priority == "Regular" and confidence in {"High", "Medium"}:
+        route = "standard"
+    else:
+        route = "needs_review"
+        state["error"] = error_result(
+            "Invalid analysis values; routing to manual review."
+        )["error"]
+        print(f"[ERROR] {state['error']['message']}")
 
-    if confidence == "Low" or (missing_info and missing_info.lower() != "none"):
-        return "needs_review"
-
-    return "standard"
+    append_audit_log(build_audit_entry(state, route, red_flag_detected))
+    return route
 
 
 def build_workflow():

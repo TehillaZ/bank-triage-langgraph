@@ -19,6 +19,9 @@ class BankTicketAnalysis(BaseModel):
     summary: str = Field(
         description="A brief 1-sentence summary of what the customer wants."
     )
+    reasoning: str = Field(
+        description="Brief explanation for the chosen category, priority, and confidence."
+    )
     missing_info: str = Field(
         description="Important missing information from the customer request, or 'None'."
     )
