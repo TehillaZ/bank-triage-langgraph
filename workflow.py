@@ -1,3 +1,4 @@
+import re
 from typing import TypedDict, Optional
 from langgraph.graph import StateGraph, END
 from langchain_groq import ChatGroq
@@ -10,6 +11,30 @@ class AgentState(TypedDict):
     raw_input: str
     cleaned_input: str
     analysis: Optional[dict]
+
+
+RED_FLAG_PATTERNS = [
+    r"\bstolen\b",
+    r"\bfraud(ulent)?\b",
+    r"\bunauthorized\b",
+    r"didn'?t (make|authorize)",
+    r"\$\d{3,}",
+]
+
+
+def contains_red_flag(text: str) -> bool:
+    """
+    Deterministic keyword/amount check that force-escalates regardless
+    of what the LLM's priority classification says.
+
+    Args:
+        text (str): The cleaned customer input text.
+
+    Returns:
+        bool: True if any red-flag pattern is found in the text.
+    """
+    text_lower = text.lower()
+    return any(re.search(pattern, text_lower) for pattern in RED_FLAG_PATTERNS)
 
 
 def preprocess_node(state: AgentState) -> dict:
@@ -47,7 +72,10 @@ def classifier_node(state: AgentState) -> dict:
     system_prompt = """
         You are a bank triage assistant.
         Analyze the customer's request and classify it.
-        Return category, priority, summary, and missing_info.
+        Return category, priority, sentiment, confidence, summary,
+        reasoning, and missing_info.
+        The reasoning field should briefly explain WHY you chose this
+        category, priority, and confidence level.
         """
     
     response = structured_llm.invoke([
@@ -55,6 +83,8 @@ def classifier_node(state: AgentState) -> dict:
         ("user", state["cleaned_input"])
     ])
 
+    print(f"[REASONING] {response.dict()['reasoning']}")
+    
     return {"analysis": response.dict()}
 
 
@@ -73,7 +103,8 @@ def escalate_to_human_node(state: AgentState) -> dict:
     human_approval = interrupt(
         {
             "question": "Approve immediate escalation?",
-            "ticket_summary": state['analysis']['summary']
+            "ticket_summary": state['analysis']['summary'],
+            "reasoning": state['analysis']['reasoning']
         }
     )
     
@@ -114,17 +145,22 @@ def flag_for_review_node(state: AgentState) -> dict:
 
 
 def router_edge(state: AgentState) -> str:
-     """
-    A conditional edge (router) that inspects the LLM's priority assessment
-    and determines the next node execution path.
-    
+    """
+    A conditional edge (router) that first checks a deterministic red-flag
+    layer, then falls back to the LLM's priority/confidence assessment to
+    determine the next node execution path.
+
     Args:
         state (AgentState): The current state containing the priority key.
-        
+
     Returns:
-        str: The target route name ('escalate' or 'standard').
+        str: The target route name.
     """
     print("[EVENT] Router Node: Checking priority...")
+
+    if contains_red_flag(state["cleaned_input"]):
+        print("[RED FLAG] Deterministic rule triggered escalation.")
+        return "escalate"
 
     priority = state["analysis"]["priority"]
     confidence = state["analysis"]["confidence"]
